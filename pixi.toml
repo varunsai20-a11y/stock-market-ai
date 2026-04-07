@@ -1,0 +1,31 @@
+[workspace]
+name = "stock-market-ai"
+version = "0.1.0"
+description = "AI-powered stock market prediction and trading strategy evaluation system"
+authors = ["Varun Sai"]
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[tasks]
+train = "python main.py"
+app = "streamlit run app.py"
+backtest = "python backtest.py"
+test_imports = "python -c \"import pandas, numpy, yfinance, streamlit, textblob, joblib; print('Core dependencies loaded successfully!')\""
+test_tf = "python -c \"import tensorflow as tf; print('TensorFlow version:', tf.__version__)\""
+
+[dependencies]
+python = "3.11.*"
+pandas = "*"
+numpy = "*"
+matplotlib = "*"
+plotly = "*"
+yfinance = ">=0.2.57,<0.3"
+textblob = "*"
+streamlit = ">=1.30"
+joblib = "*"
+pip = "*"
+
+[pypi-dependencies]
+tensorflow = "*"
+scikit-learn = "*"
+scipy = "*"
