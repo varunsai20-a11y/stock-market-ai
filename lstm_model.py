@@ -22,7 +22,10 @@ def create_sequences(data, target_class, target_price_7d, seq_len):
         y_price.append(target_price_7d[i + seq_len - 1])
     return np.array(X), np.array(y_class), np.array(y_price)
 
-def train_lstm_model(ticker="AAPL", start="2020-01-01", end="2024-12-31"):
+def train_lstm_model(ticker="AAPL", start="2020-01-01", end=None):
+    from datetime import date
+    if end is None:
+        end = date.today().strftime("%Y-%m-%d")
     ensure_directories()
     
     df = fetch_stock_data(ticker, start, end)
@@ -49,19 +52,20 @@ def train_lstm_model(ticker="AAPL", start="2020-01-01", end="2024-12-31"):
     y_class_train, y_class_test = y_class_seq[:split], y_class_seq[split:]
     y_price_train, y_price_test = y_price_seq[:split], y_price_seq[split:]
     
-    # Dual-Head Multi-Task LSTM Network
+    # Dual-Head Multi-Task LSTM Network (Binary classification + Price regression)
     input_layer = Input(shape=(SEQ_LEN, len(ALL_FEATURE_COLS)))
     
     x = LSTM(128, return_sequences=True)(input_layer)
-    x = Dropout(0.3)(x)
+    x = Dropout(0.2)(x)
     x = LSTM(128, return_sequences=True)(x)
-    x = Dropout(0.3)(x)
-    x = LSTM(128, return_sequences=False)(x)
-    x = Dropout(0.3)(x)
+    x = Dropout(0.2)(x)
+    x = LSTM(64, return_sequences=False)(x)
+    x = Dropout(0.2)(x)
     
     shared_dense = Dense(64, activation='relu')(x)
     
-    out_class = Dense(3, activation='softmax', name='class_output')(shared_dense)
+    # Binary: 0=Down, 1=Up
+    out_class = Dense(2, activation='softmax', name='class_output')(shared_dense)
     out_price = Dense(7, activation='linear', name='price_output')(shared_dense)
     
     model = Model(inputs=input_layer, outputs=[out_class, out_price])
@@ -94,7 +98,7 @@ def train_lstm_model(ticker="AAPL", start="2020-01-01", end="2024-12-31"):
     
     return model, df, metrics, y_class_test, predictions
 
-def forecast_next_price_lstm(model, df, ticker="AAPL"):
+def forecast_next_price_lstm(model, df, ticker="AAPL", temperature=0.5):
     scaler_X = joblib.load(f"models/{ticker}_scaler_X.pkl")
     
     latest_rows = df.iloc[-SEQ_LEN:][ALL_FEATURE_COLS].values
@@ -103,14 +107,18 @@ def forecast_next_price_lstm(model, df, ticker="AAPL"):
     X_pred = np.array([latest_rows_scaled])
     
     predicted_out = model.predict(X_pred)
-    predicted_probs = predicted_out[0][0]
+    raw_logits = predicted_out[0][0]           # shape (2,)
     predicted_price_sequence = predicted_out[1][0]
     
-    predicted_class = int(np.argmax(predicted_probs))
-    confidence = float(predicted_probs[predicted_class])
+    # Temperature scaling — T < 1 sharpens the distribution (higher confidence)
+    scaled = raw_logits / temperature
+    predicted_probs = np.exp(scaled) / np.exp(scaled).sum()
     
-    # Mapping back to the string actions
-    action_map = {0: "Sell", 1: "Hold", 2: "Buy"}
+    predicted_class  = int(np.argmax(predicted_probs))
+    confidence       = float(predicted_probs[predicted_class])
+    
+    # Binary: 0 = Down (Sell signal), 1 = Up (Buy signal)
+    action_map       = {0: "Sell", 1: "Buy"}
     predicted_action = action_map[predicted_class]
     
     return predicted_action, confidence, predicted_probs, predicted_price_sequence

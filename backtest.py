@@ -1,23 +1,32 @@
 import pandas as pd
 import numpy as np
+import joblib
 
 from models import add_features, ALL_FEATURE_COLS
-from lstm_model import train_lstm_model, SEQ_LEN
-import joblib
+from ensemble_model import train_ensemble, ensemble_predict_row
+from lstm_model import SEQ_LEN
 from strategy import decide_trade, execute_trade
 from sentiment import fetch_sentiment
 from price_feed import fetch_stock_data
 from utils import sharpe_ratio, max_drawdown, ensure_directories
 
 
-def run_ai_backtest(ticker="AAPL", initial_cash=10000):
+def run_ai_backtest(ticker="AAPL", initial_cash=10000,
+                    lstm_weight=0.5, xgb_weight=0.5):
     ensure_directories()
     df_raw = fetch_stock_data(ticker, start="2022-01-01", end="2024-12-31")
     df = add_features(df_raw)
 
-    model, full_df, metrics, _, _ = train_lstm_model(ticker=ticker, start="2020-01-01", end="2024-12-31")
+    # Train (or reuse cached) ensemble
+    (
+        lstm_model, xgb_bst,
+        full_df,
+        lstm_metrics, xgb_metrics, _,
+        _, _,
+    ) = train_ensemble(ticker=ticker, start="2020-01-01")
 
-    scaler_X = joblib.load(f"models/{ticker}_scaler_X.pkl")
+    scaler_lstm = joblib.load(f"models/{ticker}_scaler_X.pkl")
+    scaler_xgb  = joblib.load(f"models/{ticker}_xgb_scaler.pkl")
 
     cash = initial_cash
     holdings = 0
@@ -26,22 +35,21 @@ def run_ai_backtest(ticker="AAPL", initial_cash=10000):
 
     for i in range(SEQ_LEN, len(df) - 1):
         current_price = df.iloc[i]["Close"]
-        current_date = df.index[i]
+        current_date  = df.index[i]
 
-        sequence = df.iloc[i-SEQ_LEN+1:i+1][ALL_FEATURE_COLS].values
-        sequence_scaled = scaler_X.transform(sequence)
-        
-        predicted_out = model.predict(np.array([sequence_scaled]), verbose=0)
-        predicted_probs = predicted_out[0][0]  # Multi-task model: [class_output, price_output]
-        predicted_class = int(np.argmax(predicted_probs))
-        confidence = float(predicted_probs[predicted_class])
-        
-        action_map = {0: "Sell", 1: "Hold", 2: "Buy"}
-        predicted_action = action_map[predicted_class]
+        df_slice = df.iloc[i - SEQ_LEN + 1 : i + 1]   # SEQ_LEN rows
 
-        # Zero out sentiment for historical backtests to prevent data leakage/hallucination
+        predicted_action, confidence, blended_probs = ensemble_predict_row(
+            lstm_model, xgb_bst,
+            df_slice, scaler_lstm, scaler_xgb,
+            ticker,
+            lstm_weight=lstm_weight,
+            xgb_weight=xgb_weight,
+        )
+
+        # Zero out sentiment for historical backtests to prevent data leakage
         sentiment_score = 0.0
-        action, reason = decide_trade(sentiment_score, predicted_action, confidence)
+        action, reason  = decide_trade(sentiment_score, predicted_action, confidence)
 
         cash, holdings = execute_trade(action, cash, holdings, current_price)
 
@@ -49,31 +57,30 @@ def run_ai_backtest(ticker="AAPL", initial_cash=10000):
         portfolio_values.append(portfolio_value)
 
         trade_log.append({
-            "Date": current_date,
-            "Price": current_price,
+            "Date":             current_date,
+            "Price":            current_price,
             "Predicted Signal": predicted_action,
-            "Confidence": confidence,
-            "Sentiment": sentiment_score,
-            "Action": action,
-            "Portfolio Value": portfolio_value,
-            "Reason": reason
+            "Confidence":       confidence,
+            "Sentiment":        sentiment_score,
+            "Action":           action,
+            "Portfolio Value":  portfolio_value,
+            "Reason":           reason,
         })
 
     log_df = pd.DataFrame(trade_log)
     log_df.to_csv(f"outputs/{ticker}_ai_backtest.csv", index=False)
 
-    returns = log_df["Portfolio Value"].pct_change().dropna()
-
-    total_return = ((log_df["Portfolio Value"].iloc[-1] - initial_cash) / initial_cash) * 100
-    sharpe = sharpe_ratio(returns)
-    drawdown = max_drawdown(log_df["Portfolio Value"].values)
+    returns       = log_df["Portfolio Value"].pct_change().dropna()
+    total_return  = ((log_df["Portfolio Value"].iloc[-1] - initial_cash) / initial_cash) * 100
+    sharpe        = sharpe_ratio(returns)
+    drawdown      = max_drawdown(log_df["Portfolio Value"].values)
 
     results = {
-        "Strategy": "AI Strategy",
+        "Strategy":             "AI Ensemble",
         "Final Portfolio Value": round(log_df["Portfolio Value"].iloc[-1], 2),
         "Total Return (%)": round(total_return, 2),
-        "Sharpe Ratio": sharpe,
-        "Max Drawdown (%)": drawdown
+        "Sharpe Ratio":     sharpe,
+        "Max Drawdown (%)": drawdown,
     }
 
     return log_df, results

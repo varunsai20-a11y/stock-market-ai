@@ -1,3 +1,40 @@
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Data and Models
+data/*.csv
+models/*.h5
+models/*.pkl
+models/*.json
+models/*.joblib
+outputs/*.csv
+outputs/*.png
+outputs/*.jpg
+
+# OS
+.DS_Store
+Thumbs.db

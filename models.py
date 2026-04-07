@@ -59,20 +59,11 @@ def add_features(df):
     df['SMA_50'] = df['Close'].rolling(50).mean()
     df['Volume_Change_Pct'] = df['Volume'].pct_change() * 100
 
-    # Categorical target based on 1-day future return
+    # Binary target: 1 = Up (price rises > threshold), 0 = Down
     future_return = df["Close"].shift(-1) / df["Close"] - 1
-    
-    # 0 = Sell, 1 = Hold, 2 = Buy
-    threshold = 0.005 # 0.5%
-    conditions = [
-        (future_return > threshold),
-        (future_return < -threshold)
-    ]
-    choices = [2, 0] # Buy, Sell
-    # Using np.select returns an array, we assign it as floats so we can keep NaN
-    targets = np.select(conditions, choices, default=1).astype(float)
-    
-    df["Target"] = targets
+    threshold = 0.005  # 0.5% move required
+
+    df["Target"] = (future_return > threshold).astype(float)
     df.loc[df["Close"].shift(-1).isna(), "Target"] = np.nan
 
     # Generate 7-day forward predicted prices

@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 from textblob import TextBlob
 
-from lstm_model import train_lstm_model, forecast_next_price_lstm
+from ensemble_model import train_ensemble, ensemble_predict
 from sentiment import fetch_sentiment
 from strategy import decide_trade
 from backtest import run_ai_backtest, run_buy_and_hold_backtest, run_ma_crossover_backtest
@@ -22,12 +22,18 @@ st.set_page_config(
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.title("📈 Stock Market AI")
-    st.caption("LSTM · Sentiment · Backtesting")
+    st.caption("LSTM · XGBoost · Ensemble · Sentiment")
     st.divider()
 
     ticker = st.text_input("Stock ticker", "AAPL", max_chars=10).upper().strip()
 
     run_button = st.button("Run analysis", type="primary", use_container_width=True)
+
+    st.divider()
+    st.markdown("**⚖️ Ensemble Weights**")
+    lstm_weight = st.slider("LSTM weight",  min_value=0.0, max_value=1.0, value=0.5, step=0.05)
+    xgb_weight  = 1.0 - lstm_weight
+    st.caption(f"LSTM {lstm_weight:.0%}  ·  XGBoost {xgb_weight:.0%}")
 
     st.divider()
     if st.button("Clear cache", use_container_width=True):
@@ -43,11 +49,11 @@ with st.sidebar:
 
 # ── Cached model training ─────────────────────────────────────────────────────
 @st.cache_resource(show_spinner=False)
-def get_trained_model(ticker_name: str):
-    return train_lstm_model(ticker=ticker_name)
+def get_trained_ensemble(ticker_name: str):
+    return train_ensemble(ticker=ticker_name)
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_stock_data(ticker_name: str, start: str, end: str):
+def get_stock_data(ticker_name: str, start: str, end: str = None):
     return fetch_stock_data(ticker_name, start=start, end=end)
 
 
@@ -106,20 +112,34 @@ if not st.session_state.get("run_analysis") or st.session_state.get("current_tic
 with st.status("Running analysis…", expanded=True) as status:
     try:
         st.write("📥 Fetching historical price data…")
-        # Trigger a lightweight pre-fetch so the user sees progress before training
-        _ = get_stock_data(ticker, start="2020-01-01", end="2024-12-31")
+        _ = get_stock_data(ticker, start="2020-01-01")
 
-        st.write("🧠 Training Dual-Head LSTM model (this takes ~30–60 s the first time)…")
-        model, df, metrics, actual, predicted = get_trained_model(ticker)
+        st.write("🧠 Training LSTM + XGBoost ensemble (first run ~1–2 min)…")
+        (
+            lstm_model, xgb_bst,
+            df,
+            lstm_metrics, xgb_metrics, combined_metrics,
+            actual, predicted,
+        ) = get_trained_ensemble(ticker)
 
-        st.write("🔮 Generating forecast & sentiment…")
-        predicted_action, confidence, predicted_probs, predicted_price_seq = forecast_next_price_lstm(model, df, ticker)
-        
-        current_price = df["Close"].iloc[-1]
+        st.write("🔮 Generating ensemble forecast & sentiment…")
+        (
+            predicted_action,
+            confidence,
+            predicted_probs,
+            predicted_price_seq,
+            lstm_probs,
+            xgb_probs,
+        ) = ensemble_predict(
+            lstm_model, xgb_bst, df, ticker,
+            lstm_weight=lstm_weight, xgb_weight=xgb_weight,
+        )
+
+        current_price      = df["Close"].iloc[-1]
         predicted_price_1d = predicted_price_seq[0]
-        price_delta_1d = predicted_price_1d - current_price
-        price_delta_pct = (price_delta_1d / current_price) * 100
-        
+        price_delta_1d     = predicted_price_1d - current_price
+        price_delta_pct    = (price_delta_1d / current_price) * 100
+
         sentiment_score, headlines = fetch_sentiment(ticker)
         action, reason = decide_trade(sentiment_score, predicted_action, confidence)
 
@@ -202,19 +222,65 @@ left, right = st.columns(2, gap="large")
 
 with left:
     st.subheader("Model Evaluation")
-    metrics_df = pd.DataFrame([metrics]).T.rename(columns={0: "Value"})
-    st.dataframe(metrics_df, use_container_width=True)
 
-    st.caption("Test classification accuracy metrics for the Sell/Hold/Buy signal target.")
-    
-    st.markdown("**Current prediction probabilities**")
-    fig_pred = go.Figure(data=[
-        go.Bar(name='Probabilities', x=['Sell', 'Hold', 'Buy'], y=predicted_probs, marker_color=['#E53935', '#FB8C00', '#43A047'])
-    ])
+    # ── Side-by-side LSTM vs XGBoost metric cards ─────────────────────────
+    mc1, mc2 = st.columns(2)
+    with mc1:
+        st.markdown("""
+            <div style="background:rgba(255,152,0,0.08);border:1px solid rgba(255,152,0,0.3);
+                        border-radius:8px;padding:12px;">
+                <p style="margin:0;font-size:12px;color:#aaa;">🧠 LSTM</p>
+                <p style="margin:4px 0 0;font-size:22px;font-weight:700;">"""
+                + f"{lstm_metrics['Accuracy (%)']:.1f}%" +
+                """</p>
+                <p style="margin:2px 0 0;font-size:12px;color:#aaa;">F1 """
+                + f"{lstm_metrics['Weighted F1 Score']:.1f}" +
+                """</p>
+            </div>""", unsafe_allow_html=True)
+    with mc2:
+        st.markdown("""
+            <div style="background:rgba(33,150,243,0.08);border:1px solid rgba(33,150,243,0.3);
+                        border-radius:8px;padding:12px;">
+                <p style="margin:0;font-size:12px;color:#aaa;">⚡ XGBoost</p>
+                <p style="margin:4px 0 0;font-size:22px;font-weight:700;">"""
+                + f"{xgb_metrics['Accuracy (%)']:.1f}%" +
+                """</p>
+                <p style="margin:2px 0 0;font-size:12px;color:#aaa;">F1 """
+                + f"{xgb_metrics['Weighted F1 Score']:.1f}" +
+                """</p>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.caption("Accuracy & F1 are computed on a chronological 20% hold-out test set.")
+
+    # ── Ensemble probability breakdown ────────────────────────────────────
+    st.markdown("**Ensemble probability breakdown**")
+    labels = ['Down (Sell)', 'Up (Buy)']
+    fig_pred = go.Figure()
+    fig_pred.add_trace(go.Bar(
+        name='LSTM',
+        x=labels, y=lstm_probs,
+        marker_color=['rgba(229,57,53,0.5)', 'rgba(67,160,71,0.5)'],
+        opacity=0.7,
+    ))
+    fig_pred.add_trace(go.Bar(
+        name='XGBoost',
+        x=labels, y=xgb_probs,
+        marker_color=['rgba(229,57,53,0.8)', 'rgba(67,160,71,0.8)'],
+        opacity=0.7,
+    ))
+    fig_pred.add_trace(go.Bar(
+        name='Ensemble',
+        x=labels, y=predicted_probs,
+        marker_color=['#E53935', '#43A047'],
+        opacity=1.0,
+    ))
     fig_pred.update_layout(
+        barmode='group',
         yaxis_title="Probability",
         margin=dict(l=0, r=0, t=10, b=0),
-        height=250,
+        height=280,
+        legend=dict(orientation="h", y=1.1),
     )
     st.plotly_chart(fig_pred, use_container_width=True)
 
