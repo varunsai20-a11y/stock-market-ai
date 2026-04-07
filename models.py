@@ -7,7 +7,10 @@ from price_feed import fetch_stock_data
 from utils import ensure_directories
 
 FEATURES = ["Open", "High", "Low", "Close", "Volume"]
-ALL_FEATURE_COLS = FEATURES + ["SMA_5", "SMA_10", "Return_1d", "Volatility_5", "RSI_14", "MACD", "MACD_Signal", "BB_Upper", "BB_Lower", "ATR_14", "ROC_5"]
+ALL_FEATURE_COLS = FEATURES + [
+    "SMA_5", "SMA_10", "Return_1d", "Volatility_5", "RSI_14", "MACD", "MACD_Signal", 
+    "BB_Upper", "BB_Lower", "ATR_14", "ROC_5", "EMA_20", "SMA_50", "Volume_Change_Pct"
+]
 
 
 def add_features(df):
@@ -51,6 +54,11 @@ def add_features(df):
     # Momentum (Rate of Change) - 5 days
     df['ROC_5'] = df['Close'].pct_change(periods=5) * 100
 
+    # New requested indicators
+    df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
+    df['SMA_50'] = df['Close'].rolling(50).mean()
+    df['Volume_Change_Pct'] = df['Volume'].pct_change() * 100
+
     # Categorical target based on 1-day future return
     future_return = df["Close"].shift(-1) / df["Close"] - 1
     
@@ -67,7 +75,12 @@ def add_features(df):
     df["Target"] = targets
     df.loc[df["Close"].shift(-1).isna(), "Target"] = np.nan
 
-    # Drop only rows where features are NaN, keep row with Target=NaN (today)
+    # Generate 7-day forward predicted prices
+    for i in range(1, 8):
+        df[f"Target_Price_{i}"] = df["Close"].shift(-i)
+
+    # Drop only rows where features are NaN. 
+    # Do NOT drop NaN target rows because we need the latest row for inference!
     df.dropna(subset=ALL_FEATURE_COLS, inplace=True)
     return df
 

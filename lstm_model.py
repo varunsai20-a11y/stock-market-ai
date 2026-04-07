@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, LSTM, Dense, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
 
 from price_feed import fetch_stock_data
@@ -14,12 +14,13 @@ from utils import classification_metrics, ensure_directories
 
 SEQ_LEN = 15
 
-def create_sequences(data, target, seq_len):
-    X, y = [], []
+def create_sequences(data, target_class, target_price_7d, seq_len):
+    X, y_class, y_price = [], [], []
     for i in range(len(data) - seq_len):
         X.append(data[i:(i + seq_len)])
-        y.append(target[i + seq_len])
-    return np.array(X), np.array(y)
+        y_class.append(target_class[i + seq_len - 1]) # Target for next day
+        y_price.append(target_price_7d[i + seq_len - 1])
+    return np.array(X), np.array(y_class), np.array(y_price)
 
 def train_lstm_model(ticker="AAPL", start="2020-01-01", end="2024-12-31"):
     ensure_directories()
@@ -27,10 +28,13 @@ def train_lstm_model(ticker="AAPL", start="2020-01-01", end="2024-12-31"):
     df = fetch_stock_data(ticker, start, end)
     df = add_features(df)
     
-    df_train = df.dropna(subset=["Target"])
+    PRICE_COLS = [f"Target_Price_{i}" for i in range(1, 8)]
+    
+    df_train = df.dropna(subset=["Target"] + PRICE_COLS)
     
     X = df_train[ALL_FEATURE_COLS].values
-    y = df_train["Target"].values
+    y_class = df_train["Target"].values
+    y_price = df_train[PRICE_COLS].values
     
     split_idx = int(len(X) * 0.8)
 
@@ -38,41 +42,57 @@ def train_lstm_model(ticker="AAPL", start="2020-01-01", end="2024-12-31"):
     scaler_X.fit(X[:split_idx])
     X_scaled = scaler_X.transform(X)
     
-    X_seq, y_seq = create_sequences(X_scaled, y, SEQ_LEN)
+    X_seq, y_class_seq, y_price_seq = create_sequences(X_scaled, y_class, y_price, SEQ_LEN)
     
     split = int(len(X_seq) * 0.8)
     X_train, X_test = X_seq[:split], X_seq[split:]
-    y_train, y_test = y_seq[:split], y_seq[split:]
+    y_class_train, y_class_test = y_class_seq[:split], y_class_seq[split:]
+    y_price_train, y_price_test = y_price_seq[:split], y_price_seq[split:]
     
-    # Building the LSTM network for Classification
-    model = Sequential([
-        LSTM(128, return_sequences=True, input_shape=(SEQ_LEN, len(ALL_FEATURE_COLS))),
-        Dropout(0.3),
-        LSTM(128, return_sequences=False),
-        Dropout(0.3),
-        Dense(64, activation='relu'),
-        Dense(3, activation='softmax')
-    ])
+    # Dual-Head Multi-Task LSTM Network
+    input_layer = Input(shape=(SEQ_LEN, len(ALL_FEATURE_COLS)))
     
-    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    x = LSTM(128, return_sequences=True)(input_layer)
+    x = Dropout(0.3)(x)
+    x = LSTM(128, return_sequences=True)(x)
+    x = Dropout(0.3)(x)
+    x = LSTM(128, return_sequences=False)(x)
+    x = Dropout(0.3)(x)
+    
+    shared_dense = Dense(64, activation='relu')(x)
+    
+    out_class = Dense(3, activation='softmax', name='class_output')(shared_dense)
+    out_price = Dense(7, activation='linear', name='price_output')(shared_dense)
+    
+    model = Model(inputs=input_layer, outputs=[out_class, out_price])
+    
+    model.compile(
+        optimizer='adam', 
+        loss={'class_output': 'sparse_categorical_crossentropy', 'price_output': 'mse'},
+        metrics={'class_output': 'accuracy'}
+    )
     
     early_stop = EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True)
     
-    print("Training LSTM Classifier... this may take a minute.")
-    model.fit(X_train, y_train, epochs=100, batch_size=16, 
-              validation_data=(X_test, y_test), 
-              callbacks=[early_stop], verbose=1)
+    print("Training Multi-Head LSTM... this may take a minute.")
+    model.fit(
+        X_train, {'class_output': y_class_train, 'price_output': y_price_train},
+        validation_data=(X_test, {'class_output': y_class_test, 'price_output': y_price_test}),
+        epochs=100, batch_size=16, 
+        callbacks=[early_stop], verbose=1
+    )
     
-    predictions_prob = model.predict(X_test)
+    predictions_out = model.predict(X_test)
+    predictions_prob = predictions_out[0]
     predictions = np.argmax(predictions_prob, axis=1)
     
-    metrics = classification_metrics(y_test, predictions)
+    metrics = classification_metrics(y_class_test, predictions)
     
     # Save the model and scaler
     model.save(f"models/{ticker}_lstm.h5")
     joblib.dump(scaler_X, f"models/{ticker}_scaler_X.pkl")
     
-    return model, df, metrics, y_test, predictions
+    return model, df, metrics, y_class_test, predictions
 
 def forecast_next_price_lstm(model, df, ticker="AAPL"):
     scaler_X = joblib.load(f"models/{ticker}_scaler_X.pkl")
@@ -82,7 +102,10 @@ def forecast_next_price_lstm(model, df, ticker="AAPL"):
     
     X_pred = np.array([latest_rows_scaled])
     
-    predicted_probs = model.predict(X_pred)[0]
+    predicted_out = model.predict(X_pred)
+    predicted_probs = predicted_out[0][0]
+    predicted_price_sequence = predicted_out[1][0]
+    
     predicted_class = int(np.argmax(predicted_probs))
     confidence = float(predicted_probs[predicted_class])
     
@@ -90,4 +113,4 @@ def forecast_next_price_lstm(model, df, ticker="AAPL"):
     action_map = {0: "Sell", 1: "Hold", 2: "Buy"}
     predicted_action = action_map[predicted_class]
     
-    return predicted_action, confidence, predicted_probs
+    return predicted_action, confidence, predicted_probs, predicted_price_sequence

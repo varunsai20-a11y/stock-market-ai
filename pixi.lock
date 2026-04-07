@@ -147,6 +147,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/orc-2.3.0-h8fc0eb6_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-26.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pandas-2.3.3-py311h11fd7f3_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pandas-datareader-0.10.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pcre2-10.47-hd2b5f0e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/peewee-4.0.4-py311h9c13b91_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pillow-12.2.0-py311h17b8079_0.conda
@@ -2383,6 +2384,20 @@ packages:
   - pkg:pypi/pandas?source=hash-mapping
   size: 14211779
   timestamp: 1764615555643
+- conda: https://conda.anaconda.org/conda-forge/noarch/pandas-datareader-0.10.0-pyhd8ed1ab_1.conda
+  sha256: bc6c8f1f7ecbe4477a97961dad13aa8228278c38fc180228c45c7e44de633f57
+  md5: 55d31414ebffb90dd19d4c4186ac97fd
+  depends:
+  - lxml
+  - pandas >=1.0
+  - python >=3.9
+  - requests >=2.3.0
+  license: BSD-3-Clause
+  license_family: BSD
+  purls:
+  - pkg:pypi/pandas-datareader?source=hash-mapping
+  size: 76101
+  timestamp: 1734747024401
 - conda: https://conda.anaconda.org/conda-forge/win-64/pcre2-10.47-hd2b5f0e_0.conda
   sha256: 3e9e02174edf02cb4bcdd75668ad7b74b8061791a3bc8bdb8a52ae336761ba3e
   md5: 77eaf2336f3ae749e712f63e36b0f0a1

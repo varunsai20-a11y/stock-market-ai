@@ -31,7 +31,8 @@ def run_ai_backtest(ticker="AAPL", initial_cash=10000):
         sequence = df.iloc[i-SEQ_LEN+1:i+1][ALL_FEATURE_COLS].values
         sequence_scaled = scaler_X.transform(sequence)
         
-        predicted_probs = model.predict(np.array([sequence_scaled]), verbose=0)[0]
+        predicted_out = model.predict(np.array([sequence_scaled]), verbose=0)
+        predicted_probs = predicted_out[0][0]  # Multi-task model: [class_output, price_output]
         predicted_class = int(np.argmax(predicted_probs))
         confidence = float(predicted_probs[predicted_class])
         
