@@ -153,6 +153,7 @@ def run_ma_crossover_backtest(ticker="AAPL", initial_cash=10000):
 
 
 if __name__ == "__main__":
+    # Popular tech stocks: AAPL, MSFT, GOOGL, AMZN, META, NVDA, TSLA
     ticker = "AAPL"
 
     ai_log, ai_results = run_ai_backtest(ticker)

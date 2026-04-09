@@ -9,8 +9,8 @@ def analyze_sentiment_from_headlines(headlines):
     if not headlines:
         return 0.0, ["No recent headlines found. Sentiment assumed neutral."]
 
-    finance_up = ["record", "surge", "beat", "rally", "upgrade", "outperform", "soar", "jump", "climb", "high"]
-    finance_down = ["miss", "drop", "plunge", "downgrade", "underperform", "slump", "fall", "low", "sink"]
+    finance_up = ["record", "surge", "beat", "rally", "upgrade", "outperform", "soar", "jump", "climb", "high", "gain", "rise", "profit", "bullish", "buy", "positive"]
+    finance_down = ["miss", "drop", "plunge", "downgrade", "underperform", "slump", "fall", "low", "sink", "loss", "decline", "bearish", "sell", "negative", "concern"]
 
     scores = []
     for headline in headlines:

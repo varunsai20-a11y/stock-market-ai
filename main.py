@@ -5,8 +5,9 @@ from price_feed import get_live_price
 
 
 def main():
+    # Popular tech stocks: AAPL, MSFT, GOOGL, AMZN, META, NVDA, TSLA
     ticker = "AAPL"
-
+    
     print(f"\nTraining model for {ticker}...\n")
 
     model, df, metrics, actual, predicted = train_model(ticker=ticker)

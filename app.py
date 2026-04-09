@@ -25,7 +25,13 @@ with st.sidebar:
     st.caption("LSTM · XGBoost · Ensemble · Sentiment")
     st.divider()
 
-    ticker = st.text_input("Stock ticker", "AAPL", max_chars=10).upper().strip()
+    popular_stocks = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA"]
+    ticker_choice = st.selectbox("Select stock", popular_stocks + ["Other..."])
+    
+    if ticker_choice == "Other...":
+        ticker = st.text_input("Enter custom ticker", "").upper().strip()
+    else:
+        ticker = ticker_choice
 
     run_button = st.button("Run analysis", type="primary", use_container_width=True)
 
@@ -168,7 +174,7 @@ with col4:
 
 with col5:
     sent_color_hex = "#4CAF50" if sentiment_score > 0.1 else "#F44336" if sentiment_score < -0.1 else "#9E9E9E"
-    st.markdown(f"<p style='font-size:14px; margin-bottom:0;'>Sentiment score</p><h2 style='color:{sent_color_hex}; margin-top:0;'>{sentiment_score:+.3f}</h2>", unsafe_allow_html=True)
+    st.markdown(f"<p style='font-size:14px; margin-bottom:0;'>Avg Sentiment ({len(headlines)} news)</p><h2 style='color:{sent_color_hex}; margin-top:0;'>{sentiment_score:+.3f}</h2>", unsafe_allow_html=True)
 
 st.divider()
 
