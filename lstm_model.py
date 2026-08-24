@@ -76,13 +76,13 @@ def train_lstm_model(ticker="AAPL", start="2020-01-01", end=None):
         metrics={'class_output': 'accuracy'}
     )
     
-    early_stop = EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True)
+    early_stop = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
     
     print("Training Multi-Head LSTM... this may take a minute.")
     model.fit(
         X_train, {'class_output': y_class_train, 'price_output': y_price_train},
         validation_data=(X_test, {'class_output': y_class_test, 'price_output': y_price_test}),
-        epochs=100, batch_size=16, 
+        epochs=20, batch_size=64, 
         callbacks=[early_stop], verbose=1
     )
     
