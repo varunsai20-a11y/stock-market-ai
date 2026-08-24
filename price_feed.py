@@ -2,7 +2,7 @@ import yfinance as yf
 import pandas as pd
 import requests
 import numpy as np
-import pandas_datareader.data as web
+
 import time
 import os
 from pathlib import Path
@@ -177,21 +177,7 @@ def fetch_stock_data(ticker="AAPL", start="2020-01-01", end=None, max_retries=3)
                 print(f"   Waiting {wait_time}s before retry...")
                 time.sleep(wait_time)
 
-    # Try stooq as secondary fallback
-    try:
-        print(f"[!] yfinance exhausted retries, trying stooq...")
-        df = web.DataReader(ticker, 'stooq', start=start, end=end)
-        if not df.empty and 'Close' in df.columns:
-            df = df.sort_index()
-            df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
-            df.dropna(inplace=True)
-            save_to_cache(ticker, df)
-            save_meta(ticker, False)
-            SYNTHETIC_DATA_FLAG[ticker] = False
-            return df
-        raise ValueError(f"Stooq returned empty data for {ticker}.")
-    except Exception as e_stooq:
-        print(f"[!] Stooq fallback failed: {e_stooq}")
+
 
     # Last resort: cached data
     if cached_df is not None:
