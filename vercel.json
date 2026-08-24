@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "README.md",
+      "src": "index.html",
       "use": "@vercel/static"
     }
   ]
