@@ -29,7 +29,7 @@ def train_lstm_model(ticker="AAPL", start="2020-01-01", end=None):
     ensure_directories()
     
     df = fetch_stock_data(ticker, start, end)
-    df = add_features(df)
+    df = add_features(df, ticker=ticker)
     
     PRICE_COLS = [f"Target_Price_{i}" for i in range(1, 8)]
     

@@ -15,7 +15,7 @@ def run_ai_backtest(ticker="AAPL", initial_cash=10000,
                     lstm_weight=0.5, xgb_weight=0.5):
     ensure_directories()
     df_raw = fetch_stock_data(ticker, start="2022-01-01", end="2024-12-31")
-    df = add_features(df_raw)
+    df = add_features(df_raw, ticker=ticker)
 
     # Train (or reuse cached) ensemble
     (

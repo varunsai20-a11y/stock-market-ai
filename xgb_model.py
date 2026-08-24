@@ -63,7 +63,7 @@ def train_xgb_model(ticker: str = "AAPL",
     ensure_directories()
 
     df = fetch_stock_data(ticker, start, end)
-    df = add_features(df)
+    df = add_features(df, ticker=ticker)
 
     df_train = df.dropna(subset=["Target"])
 
