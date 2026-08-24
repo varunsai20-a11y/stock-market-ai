@@ -7,7 +7,7 @@ yfinance>=0.2.57,<0.3
 textblob
 joblib
 pandas-datareader>=0.10.0,<0.11
-tensorflow
+tensorflow-cpu
 scikit-learn
 scipy
 xgboost>=3.2.0,<4
