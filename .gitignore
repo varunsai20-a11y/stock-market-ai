@@ -26,7 +26,7 @@ wheels/
 *.egg
 
 # Data and Models
-data/*.csv
+data/
 models/*.h5
 models/*.pkl
 models/*.json

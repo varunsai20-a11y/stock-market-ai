@@ -8,7 +8,7 @@ from ensemble_model import train_ensemble, ensemble_predict
 from sentiment import fetch_sentiment
 from strategy import decide_trade
 from backtest import run_ai_backtest, run_buy_and_hold_backtest, run_ma_crossover_backtest
-from price_feed import fetch_stock_data
+from price_feed import fetch_stock_data, is_ticker_synthetic
 
 
 # ── Page config ──────────────────────────────────────────────────────────────
@@ -151,6 +151,11 @@ with st.status("Running analysis…", expanded=True) as status:
 
         status.update(label="Analysis complete!", state="complete", expanded=False)
         st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        if is_ticker_synthetic(ticker):
+            st.warning(
+                f"⚠️ Live market data fetch failed (rate limited). "
+                f"Displaying simulation results using realistic synthetic data generated for **{ticker}**."
+            )
     except Exception as e:
         status.update(label="Analysis failed", state="error", expanded=True)
         import traceback
