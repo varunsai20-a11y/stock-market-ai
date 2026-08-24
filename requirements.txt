@@ -1,0 +1,13 @@
+streamlit>=1.30
+pandas
+numpy
+matplotlib
+plotly
+yfinance>=0.2.57,<0.3
+textblob
+joblib
+pandas-datareader>=0.10.0,<0.11
+tensorflow
+scikit-learn
+scipy
+xgboost>=3.2.0,<4
